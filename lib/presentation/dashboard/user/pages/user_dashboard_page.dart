@@ -4,8 +4,8 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:html' as html;
 
-import 'package:arg30_frontend/presentation/history/history_pages.dart';
-import 'package:arg30_frontend/presentation/settings/settings_page.dart';
+import 'package:arg30_frontend/i18n/strings.dart';
+import 'package:arg30_frontend/presentation/core/layout/main_layout.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -38,22 +38,22 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
 
   final dio = Dio(BaseOptions(baseUrl: "https://arg30-backend.onrender.com"));
 
-  final List<String> availableClasses = [
-    "Teklif",
-    "Sözleşme",
-    "Fatura",
-    "Ar-Ge Projesi",
-    "Toplantı Özeti",
-    "Teknik Doküman",
-    "Rapor",
-    "İhale Dokümanı",
-    "Sunum",
-    "Politika / Prosedür",
+  List<String> availableClasses(BuildContext context) => [
+    translate(context, "classes_offer"),
+    translate(context, "classes_contract"),
+    translate(context, "classes_invoice"),
+    translate(context, "classes_rd"),
+    translate(context, "classes_meeting"),
+    translate(context, "classes_techdoc"),
+    translate(context, "classes_report"),
+    translate(context, "classes_tender"),
+    translate(context, "classes_presentation"),
+    translate(context, "classes_policy"),
   ];
 
-  // ------------------------------------------------------------
-  // DOSYA SEÇ
-  // ------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // FILE PICKER
+  // ---------------------------------------------------------------------------
   Future<void> pickFile() async {
     setState(() {
       selectedFilename = null;
@@ -98,14 +98,14 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
     });
   }
 
-  // ------------------------------------------------------------
-  // 🔥 FULL MODE: STORAGE + BACKEND + FIRESTORE
-  // ------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ANALYZE + FIRESTORE SAVE
+  // ---------------------------------------------------------------------------
   Future<void> evaluateDocument() async {
     if (selectedBytes == null || selectedFilename == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Lütfen bir dosya seçin.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(translate(context, "select_file_warning"))),
+      );
       return;
     }
 
@@ -113,22 +113,17 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception("Kullanıcı giriş yapmamış!");
+      if (user == null) throw Exception("Not logged in");
 
-      // ------------------------------------------
-      // 1) STORAGE'A YÜKLE
-      // ------------------------------------------
+      // Firebase Storage upload
       final storageRef = FirebaseStorage.instance.ref().child(
         "uploads/${user.uid}/${DateTime.now().millisecondsSinceEpoch}_${selectedFilename}",
       );
 
       await storageRef.putData(selectedBytes!);
-
       final fileUrl = await storageRef.getDownloadURL();
 
-      // ------------------------------------------
-      // 2) BACKEND’E GÖNDER
-      // ------------------------------------------
+      // Backend request payload
       final classPayload =
           selectedClasses.map((c) => {"name": c, "description": ""}).toList();
 
@@ -143,36 +138,30 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
       });
 
       final response = await dio.post("/classify/", data: formData);
-
       final apiResults = response.data["results"] ?? [];
 
       setState(() => results = apiResults);
 
-      // ------------------------------------------
-      // 3) FIRESTORE'A KAYDET
-      // ------------------------------------------
       await _saveToFirestore(user.uid, fileUrl, apiResults);
-    } catch (e, stack) {
-      debugPrint("🔥 API ERROR:\n➡ $e\n➡ STACK: $stack");
-
+    } catch (e, s) {
+      debugPrint("🔥 $e\n$s");
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Analiz sırasında hata oluştu.")),
+        SnackBar(content: Text(translate(context, "error_occurred"))),
       );
     }
 
     setState(() => isLoading = false);
   }
 
-  // ------------------------------------------------------------
-  // FIRESTORE DATABASE KAYIT
-  // ------------------------------------------------------------
   Future<void> _saveToFirestore(
     String userId,
     String fileUrl,
     List<dynamic> results,
   ) async {
-    final userRef = FirebaseFirestore.instance.collection("users").doc(userId);
-    final analysesRef = userRef.collection("analyses");
+    final analysesRef = FirebaseFirestore.instance
+        .collection("users")
+        .doc(userId)
+        .collection("analyses");
 
     for (final item in results) {
       final data = item as Map<String, dynamic>;
@@ -180,262 +169,236 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
       await analysesRef.add({
         "userId": userId,
         "fileUrl": fileUrl,
+
+        // UI / Firestore alan isimleri (camelCase)
         "filename": data["filename"],
         "predictedClassTr": data["predicted_class_tr"],
         "predictedClassEn": data["predicted_class_en"],
         "confidenceClass": data["confidence_class"],
+
         "filenameDate": data["filename_date"],
         "filenameVersion": data["filename_version"],
+
         "summaryShortTr": data["summary_short_tr"],
+        "summaryShortEn": data["summary_short_en"],
         "summaryLongTr": data["summary_long_tr"],
+        "summaryLongEn": data["summary_long_en"],
+
         "headings": data["headings"] ?? [],
         "keywords": data["keywords"] ?? [],
         "topics": data["topics"] ?? [],
-        "raw": data,
+
+        "explanationTr": data["explanation_tr"],
+        "explanationEn": data["explanation_en"],
+
         "createdAt": FieldValue.serverTimestamp(),
       });
     }
-
-    debugPrint("✅ Firestore’a analiz + dosya URL’i kaydedildi.");
   }
 
-  // UI ------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F9),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF592EC3),
-        centerTitle: true,
-        title: const Text(
-          "ARG30 - Kullanıcı Paneli",
-          style: TextStyle(color: Colors.white),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history, color: Colors.white),
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HistoryPage()),
-                ),
+    return MainLayout(
+      title: translate(context, "document_analysis"),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _uploadCard(context),
+          const SizedBox(height: 20),
+          _classSelectorCard(context),
+          const SizedBox(height: 20),
+          _advancedSettingsCard(context),
+          const SizedBox(height: 20),
+          _evaluateButton(context),
+          const SizedBox(height: 20),
+          if (isLoading)
+            const Center(
+              child: CircularProgressIndicator(color: Color(0xFF592EC3)),
+            ),
+          if (!isLoading) _resultsList(context),
+        ],
+      ),
+    );
+  }
+
+  // ---------------- UPLOAD CARD ----------------
+  Widget _uploadCard(BuildContext context) {
+    return _sectionCard(
+      context,
+      child: Column(
+        children: [
+          const Icon(Icons.cloud_upload, size: 60, color: Color(0xFF592EC3)),
+          const SizedBox(height: 12),
+
+          Text(
+            translate(context, "upload_document"),
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
-                ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            translate(context, "upload_description"),
+            style: const TextStyle(color: Colors.black54),
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 20),
+
+          ElevatedButton(
+            onPressed: pickFile,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF592EC3),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+            ),
+            child: Text(translate(context, "choose_file")),
+          ),
+
+          if (selectedFilename != null) ...[
+            const SizedBox(height: 12),
+            Text(selectedFilename!),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ---------------- CLASS SELECTOR ----------------
+  Widget _classSelectorCard(BuildContext context) {
+    return _sectionCard(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            translate(context, "optional_classes"),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children:
+                availableClasses(context).map((c) {
+                  final isSelected = selectedClasses.contains(c);
+
+                  return ChoiceChip(
+                    label: Text(c),
+                    selected: isSelected,
+                    selectedColor: const Color(0xFF592EC3),
+                    labelStyle: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black,
+                    ),
+                    onSelected: (_) {
+                      setState(() {
+                        isSelected
+                            ? selectedClasses.remove(c)
+                            : selectedClasses.add(c);
+                      });
+                    },
+                  );
+                }).toList(),
           ),
         ],
       ),
-
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            _uploadCard(),
-            const SizedBox(height: 20),
-            _classSelectorCard(),
-            const SizedBox(height: 20),
-            _advancedSettingsCard(),
-            const SizedBox(height: 20),
-            _evaluateButton(),
-            const SizedBox(height: 20),
-            if (isLoading)
-              const CircularProgressIndicator(color: Color(0xFF592EC3)),
-            if (!isLoading) _resultsList(),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _uploadCard() {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const Icon(Icons.cloud_upload, size: 60, color: Color(0xFF592EC3)),
-            const SizedBox(height: 12),
-            const Text(
-              "Belgenizi yükleyin",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              "ARG30, yüklediğiniz belgeleri yapay zeka ile sınıflandırır ve özetler.",
-              style: TextStyle(color: Colors.black54),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: pickFile,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF592EC3),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 14,
-                ),
+  // ---------------- ADVANCED SETTINGS ----------------
+  Widget _advancedSettingsCard(BuildContext context) {
+    return _sectionCard(
+      context,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            translate(context, "advanced_settings"),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+
+          const SizedBox(height: 20),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(translate(context, "summarize")),
+              Switch(
+                value: summarize,
+                onChanged: (v) => setState(() => summarize = v),
+                activeColor: const Color(0xFF592EC3),
               ),
-              child: const Text("Dosya Seç"),
-            ),
-            if (selectedFilename != null) ...[
-              const SizedBox(height: 12),
-              Text("Seçilen dosya: $selectedFilename"),
             ],
-          ],
-        ),
-      ),
-    );
-  }
+          ),
 
-  Widget _classSelectorCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Belge Sınıfları (Opsiyonel)",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          const SizedBox(height: 25),
+
+          Text(translate(context, "analysis_mode")),
+          const SizedBox(height: 8),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children:
-                  availableClasses.map((c) {
-                    final isSelected = selectedClasses.contains(c);
-
-                    return ChoiceChip(
-                      label: Text(c),
-                      selected: isSelected,
-                      selectedColor: const Color(0xFF592EC3),
-                      labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black,
-                      ),
-                      onSelected: (_) {
-                        setState(() {
-                          isSelected
-                              ? selectedClasses.remove(c)
-                              : selectedClasses.add(c);
-                        });
-                      },
-                    );
-                  }).toList(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _advancedSettingsCard() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Gelişmiş Ayarlar",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Özet Çıkar (Summarize)",
-                  style: TextStyle(fontSize: 16),
+            child: DropdownButton<String>(
+              value: readMode,
+              isExpanded: true,
+              underline: const SizedBox.shrink(),
+              items: [
+                DropdownMenuItem(
+                  value: "short",
+                  child: Text(translate(context, "mode_short")),
                 ),
-                Switch(
-                  value: summarize,
-                  onChanged: (v) => setState(() => summarize = v),
-                  activeColor: const Color(0xFF6C4DFF),
+                DropdownMenuItem(
+                  value: "medium",
+                  child: Text(translate(context, "mode_medium")),
+                ),
+                DropdownMenuItem(
+                  value: "full",
+                  child: Text(translate(context, "mode_full")),
                 ),
               ],
+              onChanged: (value) => setState(() => readMode = value!),
             ),
-
-            const SizedBox(height: 25),
-
-            const Text("Analiz Modu", style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 8),
-
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: DropdownButton<String>(
-                value: readMode,
-                isExpanded: true,
-                underline: const SizedBox(),
-                items: const [
-                  DropdownMenuItem(
-                    value: "short",
-                    child: Text("Hızlı (Short)"),
-                  ),
-                  DropdownMenuItem(
-                    value: "medium",
-                    child: Text("Standart (Medium)"),
-                  ),
-                  DropdownMenuItem(
-                    value: "full",
-                    child: Text("Derin Analiz (Full)"),
-                  ),
-                ],
-                onChanged: (value) => setState(() => readMode = value!),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _evaluateButton() {
-    return ElevatedButton(
-      onPressed: selectedBytes == null ? null : evaluateDocument,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF592EC3),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-      ),
-      child: const Text("Değerlendir"),
-    );
-  }
-
-  Widget _resultsList() {
+  // ---------------- ANALYSIS RESULT LIST ----------------
+  Widget _resultsList(BuildContext context) {
     if (results.isEmpty) return const SizedBox();
+
+    final lang = Localizations.localeOf(context).languageCode;
 
     return Column(
       children:
           results.map((item) {
+            final classLabel =
+                lang == "tr"
+                    ? item["predicted_class_tr"]
+                    : item["predicted_class_en"];
+
             return Card(
               child: ListTile(
                 title: Text(item["filename"]),
-                subtitle: Text(item["predicted_class_tr"] ?? "-"),
+                subtitle: Text(classLabel ?? "-"),
                 trailing: const Icon(Icons.arrow_forward_ios),
                 onTap: () {
+                  final mapped = _mapBackendToUi(item as Map<String, dynamic>);
+
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => AnalysisDetailPage(result: item),
+                      builder: (_) => AnalysisDetailPage(result: mapped),
                     ),
                   );
                 },
@@ -443,5 +406,50 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
             );
           }).toList(),
     );
+  }
+
+  // ---------------- SECTION WRAPPER ----------------
+  Widget _sectionCard(BuildContext context, {required Widget child}) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(padding: const EdgeInsets.all(20), child: child),
+    );
+  }
+
+  Widget _evaluateButton(BuildContext context) {
+    return ElevatedButton(
+      onPressed: selectedBytes == null ? null : evaluateDocument,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF592EC3),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+      ),
+      child: Text(translate(context, "evaluate")),
+    );
+  }
+
+  Map<String, dynamic> _mapBackendToUi(Map<String, dynamic> data) {
+    return {
+      "filename": data["filename"],
+      "predictedClassTr": data["predicted_class_tr"],
+      "predictedClassEn": data["predicted_class_en"],
+      "confidenceClass": data["confidence_class"],
+
+      "filenameDate": data["filename_date"],
+      "filenameVersion": data["filename_version"],
+
+      "summaryShortTr": data["summary_short_tr"],
+      "summaryShortEn": data["summary_short_en"],
+      "summaryLongTr": data["summary_long_tr"],
+      "summaryLongEn": data["summary_long_en"],
+
+      "headings": data["headings"] ?? [],
+      "keywords": data["keywords"] ?? [],
+      "topics": data["topics"] ?? [],
+
+      "explanationTr": data["explanation_tr"],
+      "explanationEn": data["explanation_en"],
+    };
   }
 }

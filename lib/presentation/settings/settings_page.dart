@@ -10,6 +10,16 @@ class SettingsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios),
+          color: Colors.white,
+          onPressed:
+              () => Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/user',
+                (route) => false,
+              ),
+        ),
         title: const Text("Ayarlar"),
         backgroundColor: const Color(0xFF592EC3),
       ),
