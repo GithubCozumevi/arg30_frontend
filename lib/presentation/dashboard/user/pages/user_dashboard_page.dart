@@ -6,6 +6,7 @@ import 'dart:html' as html;
 
 import 'package:arg30_frontend/i18n/strings.dart';
 import 'package:arg30_frontend/presentation/core/layout/main_layout.dart';
+import 'package:arg30_frontend/presentation/settings/language_provider.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,6 +16,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:provider/provider.dart';
 
 import 'analysis_detail_page.dart';
 
@@ -201,8 +203,10 @@ class _UserDashboardPageState extends State<UserDashboardPage> {
   // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    Provider.of<LanguageProvider>(context).lang;
+
     return MainLayout(
-      title: translate(context, "document_analysis"),
+      titleKey: "document_analysis",
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

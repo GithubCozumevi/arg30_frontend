@@ -4,23 +4,24 @@ import '../../settings/language_provider.dart';
 import '../../../i18n/strings.dart';
 
 class MainLayout extends StatelessWidget {
-  final String title;
+  final String titleKey;
   final Widget child;
 
-  const MainLayout({super.key, required this.title, required this.child});
+  const MainLayout({super.key, required this.titleKey, required this.child});
 
   @override
   Widget build(BuildContext context) {
+    // Dil değiştiğinde tüm layout rebuild olur
+    Provider.of<LanguageProvider>(context).lang;
+
     return Scaffold(
       body: Row(
         children: [
           _sidebar(context),
-
           Expanded(
             child: Column(
               children: [
-                _topBar(context, title),
-
+                _topBar(context),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(24),
@@ -35,11 +36,8 @@ class MainLayout extends StatelessWidget {
     );
   }
 
-  // ------------------------------
-  // SIDEBAR
-  // ------------------------------
   Widget _sidebar(BuildContext context) {
-    final lang = Provider.of<LanguageProvider>(context).lang;
+    Provider.of<LanguageProvider>(context).lang;
 
     return Container(
       width: 240,
@@ -67,7 +65,7 @@ class MainLayout extends StatelessWidget {
             context,
             Icons.cloud_upload,
             translate(context, "upload"),
-            () => Navigator.pushReplacementNamed(context, "/dashboard"),
+            () => Navigator.pushReplacementNamed(context, "/user"),
           ),
 
           _menuItem(
@@ -112,10 +110,9 @@ class MainLayout extends StatelessWidget {
     );
   }
 
-  // ------------------------------
-  // TOP BAR
-  // ------------------------------
-  Widget _topBar(BuildContext context, String title) {
+  Widget _topBar(BuildContext context) {
+    Provider.of<LanguageProvider>(context).lang;
+
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -129,7 +126,7 @@ class MainLayout extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            title,
+            translate(context, titleKey),
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
 
@@ -142,13 +139,10 @@ class MainLayout extends StatelessWidget {
                     context,
                     listen: false,
                   );
-
                   prov.setLang(prov.lang == "tr" ? "en" : "tr");
                 },
               ),
-
               const SizedBox(width: 8),
-
               const CircleAvatar(
                 radius: 16,
                 backgroundColor: Colors.black26,

@@ -115,6 +115,6 @@ final Map<String, Map<String, String>> localizedStrings = {
 };
 
 String translate(BuildContext context, String key) {
-  final lang = Provider.of<LanguageProvider>(context, listen: false).lang;
+  final lang = Provider.of<LanguageProvider>(context).lang;
   return localizedStrings[lang]?[key] ?? key;
 }
