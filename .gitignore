@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase / Google secrets
+**/lib/firebase_options.dart
+**/ios/GoogleService-Info.plist
+**/android/app/google-services.json
